@@ -4,18 +4,18 @@ import sys
 import time
 
 cache = {} # you can use this to implement state caching!
-DEPTH = 5
+DEPTH = 10
 
 class State:
     # This class is used to represent a state.
     # board : a list of lists that represents the 8*8 board
-    def __init__(self, board, cur_turn='r'):
+    def __init__(self, board, cur_turn='r', parent=None,):
 
         self.board = board
         self.turn = cur_turn # the current turn
         self.width = 8
         self.height = 8
-        # cur_jump_piece = cur_jump_piece # the piece that is currently jumping
+        self.parent = parent # the parent state
 
 
     def display(self):
@@ -71,13 +71,13 @@ class State:
         count = 0
         if possible_jumps:
             possible_moves = possible_jumps
-        print("jump exists: ", jump_exists)
-        print("Possible moves: ", len(possible_moves))
-        for move in possible_moves:
-            count += 1
-            new_state = State(move, get_next_turn(self.turn))
-            print("Move", count)
-            new_state.display()
+        # print("jump exists: ", jump_exists)
+        # print("Possible moves: ", len(possible_moves))
+        # for move in possible_moves:
+        #     count += 1
+        #     new_state = State(move, get_next_turn(self.turn), self)
+        #     print("Move", count)
+            # new_state.display()
         return possible_moves
     
     def get_possible_moves_for_piece(self, i, j, jump_exists):
@@ -94,7 +94,6 @@ class State:
                 ni, nj = i+d[0], j+d[1]
                 # Apply a DFS to find all the jump
                 possible_moves = self.DFS_find(new_board, ni, nj)
-                # TODO: 修改成递归，找到所有的jump， 并且return所有的jump的结果
         elif jump_exists:
             return possible_moves, jump_exists
         else:
@@ -195,10 +194,96 @@ class State:
         return possible_jump_directions
     
     # Perform the Alpha-Beta Pruning
-    def alpha_beta_search(self, depth, alpha, beta):
+    def alpha_beta_search(self, alpha, beta, depth = DEPTH):
+        '''
+        First, we need to setup the cache until the depth
+        Then, we need to perform the alpha-beta pruning
+        Return the best move
+        '''
+        best_move = None
+        best_value = -float('inf')
+        possible_moves = self.get_possible_moves()
+        for move in possible_moves:
+            value = self.min_value(State(move, get_next_turn(self.turn)), alpha, beta, depth-1)
+            if value > best_value:
+                best_value = value
+                best_move = move
+            alpha = max(alpha, best_value)
+            if alpha >= beta:
+                break
+        return best_move
+    
+    def max_value(self, state, alpha, beta, depth):
+        '''
+        Return the max value of the state
+        '''
+        if depth == 0 or state.check_win():
+            return self.eval(state)
+        value = -float('inf')
+        possible_moves = state.get_possible_moves()
+        for move in possible_moves:
+            value = max(value, self.min_value(State(move, get_next_turn(state.turn)), alpha, beta, depth-1))
+            alpha = max(alpha, value)
+            if alpha >= beta:
+                break
+        return value
+    
+    def min_value(self, state, alpha, beta, depth):
+        '''
+        Return the min value of the state
+        '''
+        if depth == 0 or state.check_win():
+            return self.eval(state)
+        value = float('inf')
+        possible_moves = state.get_possible_moves()
+        for move in possible_moves:
+            value = min(value, self.max_value(State(move, get_next_turn(state.turn)), alpha, beta, depth-1))
+            beta = min(beta, value)
+            if alpha >= beta:
+                break
+        return value
+    
+    def eval(self, state):
+        '''
+        Evaluate the state
+        if red wins, return 10000
+        if black wins, return -10000
+        else, return the difference of the number of pieces
+        for each normal piece, add 8 - distance + 1 to the opponent side
+        for each king, add 15
+        '''
+        win = state.check_win()
+        if win == 'r':
+            return 10000
+        elif win == 'b':
+            return -10000
+        else:
+            r_count = 0
+            b_count = 0
+            for i in range(state.height):
+                for j in range(state.width):
+                    if state.board[i][j] in ['r', 'R']:
+                        r_count += 1
+                    elif state.board[i][j] in ['b', 'B']:
+                        b_count += 1
+            value = r_count - b_count
+            for i in range(state.height):
+                for j in range(state.width):
+                    if state.board[i][j] == 'r':
+                        value += 8 - i
+                    elif state.board[i][j] == 'b':
+                        value -= i
+                    elif state.board[i][j] == 'R':
+                        value += 15
+                    elif state.board[i][j] == 'B':
+                        value -= 15
+            return value
+
+        
     
     
-    
+
+
 class Checker:
 
     def __init__(self, board):
@@ -215,6 +300,24 @@ class Checker:
             self.cur_state = State(available_moves[move-1], get_next_turn(self.cur_state.turn))
         
         print("The winner is: ", self.cur_state.check_win())
+    
+    def alpha_beta_play(self):
+        '''
+        Alpha-Beta player play the game
+        '''
+        num_moves = 0
+        start = time.time()
+        while self.cur_state.check_win() == None:
+            num_moves += 1
+            self.cur_state.display()
+            move = self.cur_state.alpha_beta_search(-float('inf'), float('inf'))
+            
+            self.cur_state = State(move, get_next_turn(self.cur_state.turn))
+            
+        self.cur_state.display()
+        print("The winner is: ", self.cur_state.check_win())
+        print("Move: ", num_moves)
+        print("Time: ", time.time()-start)
 
 
 
@@ -247,9 +350,10 @@ def read_from_file(filename):
 
 if __name__ == '__main__':
     # Read the input file
-    initial_board = read_from_file("checkers1.txt")
+    initial_board = read_from_file("checkers7.txt")
     checker = Checker(initial_board)
-    checker.human_play()
+    # checker.human_play()
+    checker.alpha_beta_play()
 
     # parser = argparse.ArgumentParser()
     # parser.add_argument(
