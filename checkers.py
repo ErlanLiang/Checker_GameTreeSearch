@@ -4,18 +4,25 @@ import sys
 import time
 
 cache = {} # you can use this to implement state caching!
-DEPTH = 10
+DEPTH = 13 #13
 
 class State:
     # This class is used to represent a state.
     # board : a list of lists that represents the 8*8 board
-    def __init__(self, board, cur_turn='r', parent=None,):
+    def __init__(self, board, cur_turn='r', parent=None, best_child=None):
 
         self.board = board
         self.turn = cur_turn # the current turn
         self.width = 8
         self.height = 8
         self.parent = parent # the parent state
+        self.best_child = best_child # the best child state
+
+    def __eq__(self, other):
+        return self.board == other.board and self.turn == other.turn
+    
+    def __hash__(self):
+        return hash(str(self.board) + self.turn)
 
 
     def display(self):
@@ -32,8 +39,9 @@ class State:
         '''
         r_count = 0
         b_count = 0
+        # self.display()
         for i in range(self.height):
-            for j in range(self.width):
+            for j in range(self.width):         
                 if self.board[i][j] in ['r', 'R']:
                     r_count += 1
                 elif self.board[i][j] in ['b', 'B']:
@@ -68,16 +76,8 @@ class State:
                         possible_moves += moves
                 # elif self.board[i][j] == self.turn.upper():
                 #     possible_moves += self.get_possible_moves_for_king(i, j)
-        count = 0
         if possible_jumps:
             possible_moves = possible_jumps
-        # print("jump exists: ", jump_exists)
-        # print("Possible moves: ", len(possible_moves))
-        # for move in possible_moves:
-        #     count += 1
-        #     new_state = State(move, get_next_turn(self.turn), self)
-        #     print("Move", count)
-            # new_state.display()
         return possible_moves
     
     def get_possible_moves_for_piece(self, i, j, jump_exists):
@@ -193,91 +193,312 @@ class State:
                     possible_jump_directions.append((-2, 2))
         return possible_jump_directions
     
-    # Perform the Alpha-Beta Pruning
-    def alpha_beta_search(self, alpha, beta, depth = DEPTH):
-        '''
-        First, we need to setup the cache until the depth
-        Then, we need to perform the alpha-beta pruning
-        Return the best move
-        '''
-        best_move = None
-        best_value = -float('inf')
-        possible_moves = self.get_possible_moves()
-        for move in possible_moves:
-            value = self.min_value(State(move, get_next_turn(self.turn)), alpha, beta, depth-1)
-            if value > best_value:
-                best_value = value
-                best_move = move
-            alpha = max(alpha, best_value)
-            if alpha >= beta:
-                break
-        return best_move
+    # # Perform the Alpha-Beta Pruning
+    # def alpha_beta_search(self, alpha, beta, depth = DEPTH):
+    #     '''
+    #     First, we need to setup the cache until the depth
+    #     Then, we need to perform the alpha-beta pruning
+    #     Return the best move
+    #     '''
+    #     best_move = None
+    #     if self.turn == 'r':
+    #         best_value = -float('inf')
+    #     else:
+    #         best_value = float('inf')
+    #     possible_moves = self.get_possible_moves()
+    #     for move in possible_moves:
+    #         if self.turn == 'r':
+    #             value, best_move = self.min_value(State(move, get_next_turn(self.turn)), alpha, beta, depth-1)
+    #             if value > best_value:
+    #                 best_value = value
+    #                 best_move = move
+    #             alpha = max(alpha, best_value)
+    #             if alpha >= beta:
+    #                 break
+    #         else:
+    #             value = self.max_value(State(move, get_next_turn(self.turn)), alpha, beta, depth-1)
+    #             if value < best_value:
+    #                 best_value = value
+    #                 best_move = move
+    #             beta = min(beta, best_value)
+    #             if alpha >= beta:
+    #                 break
+    #     return best_move
+    
     
     def max_value(self, state, alpha, beta, depth):
-        '''
-        Return the max value of the state
-        '''
-        if depth == 0 or state.check_win():
-            return self.eval(state)
-        value = -float('inf')
+        # Check if already cached
+        if state in cache and cache[state]['depth'] >= depth:
+            # print("Cache hit")
+            return (cache[state]['value'], cache[state]['successor'])
+        
+        if depth == 0:
+            return (self.eval(state), None)
+        
         possible_moves = state.get_possible_moves()
+        best_move = None
+        best_value = -float('inf')
+
+        if not possible_moves:
+            cache[state] = {'value': -100000, 'depth': depth, 'successor': None}
+            return (-100000, None)
+        
         for move in possible_moves:
-            value = max(value, self.min_value(State(move, get_next_turn(state.turn)), alpha, beta, depth-1))
-            alpha = max(alpha, value)
-            if alpha >= beta:
-                break
-        return value
-    
+            temp_value, temp_move = self.min_value(State(move, get_next_turn(state.turn)), alpha, beta, depth-1)
+            if temp_value > best_value:
+                best_value = temp_value
+                best_move = State(move, get_next_turn(state.turn), state)
+                
+            if best_value >= beta:
+                cache[state] = {'value': best_value, 'depth': depth, 'successor': best_move}
+                state.best_child = best_move
+                return (best_value, best_move)
+            alpha = max(alpha, best_value)
+            state.best_child = best_move
+            cache[state] = {'value': best_value, 'depth': depth, 'successor': best_move}
+        return (best_value, best_move)
+
     def min_value(self, state, alpha, beta, depth):
-        '''
-        Return the min value of the state
-        '''
-        if depth == 0 or state.check_win():
-            return self.eval(state)
-        value = float('inf')
+        # Check if already cached
+        if state in cache and cache[state]['depth'] >= depth:
+            # print("Cache hit")
+            return (cache[state]['value'], cache[state]['successor'])
+        
+        if depth == 0:
+            return (self.eval(state), None)
+        
         possible_moves = state.get_possible_moves()
+        best_move = None
+        best_value = float('inf')
+
+        if not possible_moves:
+            cache[state] = {'value': 100000, 'depth': depth, 'successor': None}
+            return (100000, None)
+        
         for move in possible_moves:
-            value = min(value, self.max_value(State(move, get_next_turn(state.turn)), alpha, beta, depth-1))
-            beta = min(beta, value)
-            if alpha >= beta:
-                break
-        return value
+            temp_value, temp_move = self.max_value(State(move, get_next_turn(state.turn)), alpha, beta, depth-1)
+            if temp_value < best_value:
+                best_value = temp_value
+                best_move = State(move, get_next_turn(state.turn), state)
+                
+            if best_value <= alpha:
+                cache[state] = {'value': best_value, 'depth': depth, 'successor': best_move}
+                state.best_child = best_move
+                return (best_value, best_move)
+            beta = min(beta, best_value)
+            state.best_child = best_move
+            cache[state] = {'value': best_value, 'depth': depth, 'successor': best_move}
+        return (best_value, best_move)
+            
     
     def eval(self, state):
-        '''
-        Evaluate the state
-        if red wins, return 10000
-        if black wins, return -10000
-        else, return the difference of the number of pieces
-        for each normal piece, add 8 - distance + 1 to the opponent side
-        for each king, add 15
-        '''
-        win = state.check_win()
-        if win == 'r':
-            return 10000
-        elif win == 'b':
-            return -10000
+        num_red_normal_pieces = 0
+        num_black_normal_pieces = 0
+
+        num_red_king_pieces = 0
+        num_black_king_pieces = 0
+
+        red_piece_positions = 0
+        black_piece_positions = 0
+
+        row_counter = 7
+        col_counter = 0
+
+        r_row = 0
+        r_col = 0
+        b_row = 0
+        b_col = 0
+
+        total = 0
+
+        for row in range(8):
+            for col in range(8):
+                if state.board[row][col] == 'r':
+                    num_red_normal_pieces += 1
+                    r_row += row + 1
+                    r_col += col + 1
+                    # if the piece is at the edge, add 1
+                    if col == 0 or col == 7:
+                        total += 1
+                    red_piece_positions += 2*(1 + row_counter)
+                elif state.board[row][col] == 'b':
+                    b_row += row + 1
+                    b_col += col + 1
+                    if col == 0 or col == 7:
+                        total += 1
+                    num_black_normal_pieces += 1
+                    black_piece_positions += 2*(1 + (7 - row_counter))
+                elif state.board[row][col] == 'R':
+                    r_row += row + 1
+                    r_col += col + 1
+                    if col == 0 or col == 7:
+                        total += 1
+                    num_red_king_pieces += 1
+                    total += 2*min(4 - abs(row_counter - 4), 4 - abs(col_counter - 4))
+                elif state.board[row][col] == 'B':
+                    b_row += row + 1
+                    b_col += col + 1
+                    if col == 0 or col == 7:
+                        total += 1
+                    num_black_king_pieces += 1
+                    total -= 2*min(4 - abs(row_counter - 4), 4 - abs(col_counter - 4))
+                col_counter += 1
+            col_counter = 0
+            row_counter -= 1
+
+        normal_piece_value = 10
+        king_piece_value = 30
+
+        tot_red = num_red_normal_pieces + num_red_king_pieces
+        tot_black = num_black_normal_pieces + num_black_king_pieces
+
+        if  tot_black == 0:
+            return -100000
+        elif tot_red == 0:
+            return 100000
+
+        total += (num_red_normal_pieces * normal_piece_value +
+                    num_red_king_pieces * king_piece_value + red_piece_positions)
+        total -= (num_black_normal_pieces * normal_piece_value +
+                    num_black_king_pieces * king_piece_value + black_piece_positions)
+        
+        
+        r_avg_row = r_row / tot_red
+        r_avg_col = r_col / tot_red
+        b_avg_row = b_row / tot_black
+        b_avg_col = b_col / tot_black
+        # the side with more piece will calculate the average position - the other side
+        if tot_red > tot_black:
+            # calculate the direct distance between the average position using 勾股定理
+            total += (6 - ((r_avg_row - b_avg_row)**2 + (r_avg_col - b_avg_col)**2)**0.5) * 5
         else:
-            r_count = 0
-            b_count = 0
-            for i in range(state.height):
-                for j in range(state.width):
-                    if state.board[i][j] in ['r', 'R']:
-                        r_count += 1
-                    elif state.board[i][j] in ['b', 'B']:
-                        b_count += 1
-            value = r_count - b_count
-            for i in range(state.height):
-                for j in range(state.width):
-                    if state.board[i][j] == 'r':
-                        value += 8 - i
-                    elif state.board[i][j] == 'b':
-                        value -= i
-                    elif state.board[i][j] == 'R':
-                        value += 15
-                    elif state.board[i][j] == 'B':
-                        value -= 15
-            return value
+            total -= (6 - ((r_avg_row - b_avg_row)**2 + (r_avg_col - b_avg_col)**2)**0.5) * 5
+        return total
+    
+    # def eval(self, state):
+    #     win = state.check_win()
+    #     if win == 'r':
+    #         return 10000
+    #     elif win == 'b':
+    #         return -10000
+    #     else:
+    #         red_score = 0
+    #         black_score = 0
+    #         center_squares = {(3, 3), (3, 4), (4, 3), (4, 4)}
+    #         double_corners = {(0, 0), (0, 7), (7, 0), (7, 7)}
+
+    #         board = state.board
+    #         for i in range(8):
+    #             for j in range(8):
+    #                 cell = board[i][j]
+    #                 if cell == 'r':
+    #                     red_score += 1  # 普通红棋子得1分
+    #                     red_score += 0.2 * (7 - i)  # 行数越高，分数越高
+    #                     if (i, j) in center_squares:
+    #                         red_score += 0.5  # 中心位置加分
+    #                     if (i, j) in double_corners:
+    #                         red_score += 0.5  # 双角位置加分
+    #                     if j == 0 or j == 7:
+    #                         red_score += 0.3  # 边缘位置加分
+    #                 elif cell == 'R':
+    #                     red_score += 3  # 红王得3分
+    #                     if (i, j) in center_squares:
+    #                         red_score += 0.5
+    #                     if (i, j) in double_corners:
+    #                         red_score += 0.5
+    #                     if j == 0 or j == 7:
+    #                         red_score += 0.3
+    #                 elif cell == 'b':
+    #                     black_score += 1
+    #                     black_score += 0.2 * i  # 行数越低，分数越高
+    #                     if (i, j) in center_squares:
+    #                         black_score += 0.5
+    #                     if (i, j) in double_corners:
+    #                         black_score += 0.5
+    #                     if j == 0 or j == 7:
+    #                         black_score += 0.3
+    #                 elif cell == 'B':
+    #                     black_score += 3
+    #                     if (i, j) in center_squares:
+    #                         black_score += 0.5
+    #                     if (i, j) in double_corners:
+    #                         black_score += 0.5
+    #                     if j == 0 or j == 7:
+    #                         black_score += 0.3
+    #         return red_score - black_score
+        
+    
+    # def eval(self, state):
+    #     '''
+    #     Evaluate the state
+    #     if red wins, return 10000
+    #     if black wins, return -10000
+    #     else, return the difference of the number of pieces
+    #     for each normal piece, add 8 - distance + 1 to the opponent side
+    #     for each king, add 15
+    #     '''
+    #     win = state.check_win()
+    #     if win == 'r':
+    #         return 10000
+    #     elif win == 'b':
+    #         return -10000
+    #     else:
+    #         total_value = 0
+    #         empty = 0   
+    #         for i in range(state.height):
+    #             for j in range(state.width):
+    #                 piece = state.board[i][j]
+    #                 if piece == 'r':
+    #                     total_value += 8 - i + 5  # Encourage red normal piece to advance
+    #                 elif piece == 'b':
+    #                     total_value -= i + 5  # Encourage black normal piece to advance
+    #                 elif piece == 'R':
+    #                     total_value += 15  # Base value for a red king
+    #                     total_value += 10 + 2*min(4 - abs(i - 4), 4 - abs(j - 4))  # Positional adjustment
+    #                     if i < 4:  # Red king should push forward
+    #                         total_value += 3  # Encourage moving towards opponent
+    #                 elif piece == 'B':
+    #                     total_value -= 15  # Base value for a black king
+    #                     total_value -= (10 + 2*min(4 - abs(i - 4), 4 - abs(j - 4)))  # Positional adjustment
+    #                     if i > 3:  # Black king should push forward
+    #                         total_value -= 3  # Encourage moving towards opponent
+    #                 else:
+    #                     empty += 1
+
+    #         return total_value
+    
+    # def eval(self, state):
+    #     '''
+    #     Evaluate the state
+    #     if red wins, return 10000
+    #     if black wins, return -10000
+    #     else, return the difference of the number of pieces
+    #     for each normal piece, add 8 - distance + 1 to the opponent side
+    #     for each king, add 15
+    #     '''
+    #     win = state.check_win()
+    #     if win == 'r':
+    #         return 10000
+    #     elif win == 'b':
+    #         return -10000
+    #     else:
+    #         value = 0
+    #         open_factor = 0
+    #         for i in range(state.height):
+    #             for j in range(state.width):
+    #                 if state.board[i][j] == 'r':
+    #                     value += 8 - i + 1
+    #                 elif state.board[i][j] == 'b':
+    #                     value -= i + 1
+    #                 elif state.board[i][j] == 'R':
+    #                     # check how center the king is one circle closer to the center add 1
+    #                     value += 10 + min(4-abs(i-4), 4-abs(j-4))
+    #                 elif state.board[i][j] == 'B':
+    #                     value -= (10 + min(4-abs(i-4), 4-abs(j-4)))
+    #                 else:
+    #                     open_factor += 1
+
+    #         return value/(open_factor+1)
 
         
     
@@ -307,12 +528,40 @@ class Checker:
         '''
         num_moves = 0
         start = time.time()
+        self.cur_state.display()
+        print("eval: ", self.cur_state.eval(self.cur_state))
         while self.cur_state.check_win() == None:
             num_moves += 1
-            self.cur_state.display()
-            move = self.cur_state.alpha_beta_search(-float('inf'), float('inf'))
+            if self.cur_state.turn == 'r':
+                value, move = self.cur_state.max_value(self.cur_state, -float('inf'), float('inf'), DEPTH)
+            else:
+                value, move = self.cur_state.min_value(self.cur_state, -float('inf'), float('inf'), DEPTH)
             
-            self.cur_state = State(move, get_next_turn(self.cur_state.turn))
+            
+            print("value: ", value)
+            # print("move: ", move)
+            # self.cur_state = State(move, get_next_turn(self.cur_state.turn))
+            
+
+            if value == 100000 or value == -100000:
+                # print(self.cur_state.best_child)
+                # while self.cur_state.best_child.board:
+                print(cache)
+                print(hash(self.cur_state))
+                while cache[self.cur_state]['successor']:
+                    num_moves += 1
+                    self.cur_state = State(cache[self.cur_state]['successor'], get_next_turn(self.cur_state.turn))
+                    # self.cur_state = self.cur_state.best_child
+                    print("eval: ", self.cur_state.eval(self.cur_state.board))
+                    print("value: ", cache[self.cur_state]['value'])
+                    self.cur_state.display()
+                break
+                    
+            self.cur_state = move
+            # print("board: ", self.cur_state.board)
+            self.cur_state.display()
+            print("eval: ", self.cur_state.eval(self.cur_state))
+            
             
         self.cur_state.display()
         print("The winner is: ", self.cur_state.check_win())
@@ -350,7 +599,7 @@ def read_from_file(filename):
 
 if __name__ == '__main__':
     # Read the input file
-    initial_board = read_from_file("checkers7.txt")
+    initial_board = read_from_file("checkers1.txt")
     checker = Checker(initial_board)
     # checker.human_play()
     checker.alpha_beta_play()
