@@ -2,9 +2,11 @@ import argparse
 import copy
 import sys
 import time
+import queue
 
 cache = {} # you can use this to implement state caching!
 DEPTH = 12
+Result = queue.Queue()
 
 class State:
     # This class is used to represent a state.
@@ -357,8 +359,9 @@ class State:
 
 class Checker:
 
-    def __init__(self, board):
+    def __init__(self, board, outputfile=None):
         self.cur_state = State(board)
+        self.outputfile = outputfile
 
     def human_play(self):
         '''
@@ -382,9 +385,10 @@ class Checker:
         '''
         Alpha-Beta player play the game
         '''
+        Result = queue.Queue()
         num_moves = 0
         start = time.time()
-        self.cur_state.display()
+        # self.cur_state.display()
         print("eval: ", self.cur_state.eval(self.cur_state))
         while self.cur_state and self.cur_state.check_win() == None:
             num_moves += 1
@@ -398,6 +402,7 @@ class Checker:
             print("value: ", value)
             # print("move: ", move)
             self.cur_state.display()
+            Result.put(self.cur_state.board)
             print("eval: ", self.cur_state.eval(self.cur_state))
             self.cur_state = move
             # self.cur_state.display()
@@ -414,10 +419,12 @@ class Checker:
             # print("board: ", self.cur_state.board)
             
             
-        # self.cur_state.display()
+        self.cur_state.display()
+        Result.put(self.cur_state.board)
         print("The winner is: ", self.cur_state.check_win())
         print("Move: ", num_moves)
         print("Time: ", time.time()-start)
+        write_to_file("checkers4.txt", num_moves, time.time()-start)
 
 
 def get_opp_char(player):
@@ -441,34 +448,51 @@ def read_from_file(filename):
 
     return board
 
+def write_to_file(filename, num_moves, time):
+    # write the solution to the file as same as the print_solution function from the Result Queue
+    f = open(filename, 'w')
+    while not Result.empty():
+        board = Result.get()
+        for i in board:
+            for j in i:
+                f.write(j)
+            f.write("\n")
+        f.write("\n")
+    f.write(str(num_moves) + " moves\n")
+    f.write(str(time) + " seconds\n")
+    f.close()
+    
+    
+
 if __name__ == '__main__':
-    # Read the input file
-    initial_board = read_from_file("checkers4.txt")
-    checker = Checker(initial_board)
-    # checker.human_play()
-    checker.alpha_beta_play()
+    # # Read the input file
+    # initial_board = read_from_file("checkers4.txt")
+    # checker = Checker(initial_board)
+    # # checker.human_play()
+    # checker.alpha_beta_play()
 
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument(
-    #     "--inputfile",
-    #     type=str,
-    #     required=True,
-    #     help="The input file that contains the puzzles."
-    # )
-    # parser.add_argument(
-    #     "--outputfile",
-    #     type=str,
-    #     required=True,
-    #     help="The output file that contains the solution."
-    # )
-    # args = parser.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--inputfile",
+        type=str,
+        required=True,
+        help="The input file that contains the puzzles."
+    )
+    parser.add_argument(
+        "--outputfile",
+        type=str,
+        required=True,
+        help="The output file that contains the solution."
+    )
+    args = parser.parse_args()
 
-    # initial_board = read_from_file(args.inputfile)
-    # state = State(initial_board)
-    # turn = 'r'
-    # ctr = 0
-
+    initial_board = read_from_file(args.inputfile)
+    state = State(initial_board, 'r')
+    turn = 'r'
+    ctr = 0
+    print("start")
     # sys.stdout = open(args.outputfile, 'w')
 
     # sys.stdout = sys.__stdout__
+    Checker(initial_board, args.outputfile).alpha_beta_play()
 
