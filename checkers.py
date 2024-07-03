@@ -96,7 +96,7 @@ class State:
                     new_board[i+d[0]][j+d[1]] = self.board[i][j].upper()
                     new_board[i][j] = '.'
                     new_board[i+d[0]//2][j+d[1]//2] = '.'
-                    possible_moves.append(new_board)
+                    possible_moves.append(State(new_board, get_next_turn(self.turn), self))
                 else:
                     new_board = copy.deepcopy(self.board)
                     new_board[i+d[0]][j+d[1]] = self.board[i][j]
@@ -142,7 +142,7 @@ class State:
                     else:
                         new_board[i+d[0]][j+d[1]] = self.board[i][j]
                     new_board[i][j] = '.'
-                    possible_moves.append(new_board)            
+                    possible_moves.append(State(new_board, get_next_turn(self.turn), self))          
         return possible_moves, jump_exists
     
     def DFS_find(self, board, i, j):
@@ -163,7 +163,7 @@ class State:
                         new_board[i+d[0]][j+d[1]] = cur_board[i][j].upper()
                         new_board[i][j] = '.'
                         new_board[i+d[0]//2][j+d[1]//2] = '.'
-                        final_boards.append(new_board)
+                        final_boards.append(State(new_board, get_next_turn(self.turn), self))
                     else:
                         new_board[i+d[0]][j+d[1]] = cur_board[i][j]
                         new_board[i][j] = '.'
@@ -171,7 +171,7 @@ class State:
                         ni, nj = i+d[0], j+d[1]
                         possible_moves.append((new_board, ni, nj))
             else:
-                final_boards.append(cur_board)
+                final_boards.append(State(cur_board, get_next_turn(self.turn), self))
         return final_boards
 
     def can_jump(self, i, j, board):
@@ -218,17 +218,20 @@ class State:
         best_value = -float('inf')
 
         if not possible_moves:
-            cache[state] = {'value': -100000, 'depth': depth, 'successor': None}
-            return (-100000, None)
+            value = -100000 * (DEPTH + 1 - depth)
+            cache[state] = {'value': value, 'depth': depth, 'successor': None}
+            return (value, None)
+        
+        possible_moves.sort(key=lambda x: self.eval(x), reverse=True)
         
         for move in possible_moves:
             # if State(move, get_next_turn(state.turn), state) in been:
             #     continue
             # else:
-            temp_value, temp_move = self.min_value(State(move, get_next_turn(state.turn)), alpha, beta, depth-1)
+            temp_value, temp_move = self.min_value(move, alpha, beta, depth-1)
             if temp_value > best_value:
                 best_value = temp_value
-                best_move = State(move, get_next_turn(state.turn), state)
+                best_move = move
             if best_value > beta:
                 cache[state] = {'value': best_value, 'depth': depth, 'successor': best_move}
                 return (best_value, best_move)
@@ -250,17 +253,20 @@ class State:
         best_value = float('inf')
 
         if not possible_moves:
-            cache[state] = {'value': 100000, 'depth': depth, 'successor': None}
-            return (100000, None)
+            value = 100000 * (DEPTH + 1 - depth)
+            cache[state] = {'value': value, 'depth': depth, 'successor': None}
+            return (value, None)
+        
+        possible_moves.sort(key=lambda x: self.eval(x), reverse=False)
         
         for move in possible_moves:
             # if State(move, get_next_turn(state.turn), state) in been:
             #     continue
             # else:
-            temp_value, temp_move = self.max_value(State(move, get_next_turn(state.turn)), alpha, beta, depth-1)
+            temp_value, temp_move = self.max_value(move, alpha, beta, depth-1)
             if temp_value < best_value:
                 best_value = temp_value
-                best_move = State(move, get_next_turn(state.turn), state)
+                best_move = move
             if best_value < alpha:
                 cache[state] = {'value': best_value, 'depth': depth, 'successor': best_move}
                 return (best_value, best_move)
@@ -379,10 +385,16 @@ class Checker:
         while self.cur_state.check_win() == None:        
             count = 1
             available_moves = self.cur_state.get_possible_moves()
+            if self.cur_state.turn == 'r':
+                available_moves.sort(key=lambda x: self.cur_state.eval(State(x, get_next_turn(self.cur_state.turn))), reverse=True)
+            else:
+                available_moves.sort(key=lambda x: self.cur_state.eval(State(x, get_next_turn(self.cur_state.turn))), reverse=False)
             for i in available_moves:
+                cur = State(i, get_next_turn(self.cur_state.turn))
                 print(count)
+                print("eval: ", cur.eval(cur))
                 print(" ")
-                State(i, get_next_turn(self.cur_state.turn)).display()
+                cur.display()
                 count += 1
             move = int(input("Enter the move: "))
             self.cur_state = State(available_moves[move-1], get_next_turn(self.cur_state.turn))
@@ -395,8 +407,8 @@ class Checker:
         '''
         num_moves = 0
         start = time.time()
-        self.cur_state.display()
-        print("eval: ", self.cur_state.eval(self.cur_state))
+        # self.cur_state.display()
+        # print("eval: ", self.cur_state.eval(self.cur_state))
         while self.cur_state and self.cur_state.check_win() == None:
             num_moves += 1
             
@@ -406,22 +418,22 @@ class Checker:
                 value, move = self.cur_state.min_value(self.cur_state, -float('inf'), float('inf'), DEPTH)
             
             
-            print("value: ", value)
+            # print("value: ", value)
             # print("move: ", move)
-            self.cur_state.display()
+            # self.cur_state.display()
             self.Result.append(self.cur_state.board)
             # been.add(self.cur_state)
             # print("eval: ", self.cur_state.eval(self.cur_state))
             self.cur_state = move
-            self.cur_state.display()
-            print("eval: ", self.cur_state.eval(self.cur_state))
+            # self.cur_state.display()
+            # print("eval: ", self.cur_state.eval(self.cur_state))
 
-            if value == 100000 or value == -100000 or value == 10000 or value == -10000:
-                while self.cur_state in cache and cache[self.cur_state]['successor'] :
-                    num_moves += 1
-                    self.cur_state = cache[self.cur_state]['successor']
-                    self.cur_state.display()
-                break
+            # if value == 100000 or value == -100000 or value == 10000 or value == -10000:
+            #     while self.cur_state in cache and cache[self.cur_state]['successor'] :
+            #         num_moves += 1
+            #         self.cur_state = cache[self.cur_state]['successor']
+            #         self.cur_state.display()
+            #     break
                     
 
             # print("board: ", self.cur_state.board)
@@ -432,7 +444,7 @@ class Checker:
         print("The winner is: ", self.cur_state.check_win())
         print("Move: ", num_moves)
         print("Time: ", time.time()-start)
-        # write_to_file(self.outputfile , num_moves, time.time()-start, Result)
+        write_to_file(self.outputfile , num_moves, time.time()-start, self.Result)
 
 
 def get_opp_char(player):
@@ -458,10 +470,8 @@ def read_from_file(filename):
 
 def write_to_file(filename, num_moves, time, Result):
     # write the solution to the file as same as the print_solution function from the Result Queue
-    print("writing to ", filename)
     f = open(filename, 'w')
     for k in Result:
-        print("board: ", k)
         for i in k:
             for j in i:
                 f.write(j)
@@ -476,33 +486,33 @@ def write_to_file(filename, num_moves, time, Result):
 
 if __name__ == '__main__':
     # # Read the input file
-    initial_board = read_from_file("checkers9.txt")
-    checker = Checker(initial_board)
-    # checker.human_play()
-    checker.alpha_beta_play()
+    # initial_board = read_from_file("checkers9.txt")
+    # checker = Checker(initial_board)
+    # # checker.human_play()
+    # checker.alpha_beta_play()
 
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument(
-    #     "--inputfile",
-    #     type=str,
-    #     required=True,
-    #     help="The input file that contains the puzzles."
-    # )
-    # parser.add_argument(
-    #     "--outputfile",
-    #     type=str,
-    #     required=True,
-    #     help="The output file that contains the solution."
-    # )
-    # args = parser.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--inputfile",
+        type=str,
+        required=True,
+        help="The input file that contains the puzzles."
+    )
+    parser.add_argument(
+        "--outputfile",
+        type=str,
+        required=True,
+        help="The output file that contains the solution."
+    )
+    args = parser.parse_args()
 
-    # initial_board = read_from_file(args.inputfile)
-    # # state = State(initial_board, 'r')
-    # # turn = 'r'
-    # # ctr = 0
+    initial_board = read_from_file(args.inputfile)
+    # state = State(initial_board, 'r')
+    # turn = 'r'
+    # ctr = 0
     # print("start")
     # # sys.stdout = open(args.outputfile, 'w')
     # print("output file: ", args.outputfile)
-    # sys.stdout = sys.__stdout__
-    # Checker(initial_board, args.outputfile).alpha_beta_play()
+    sys.stdout = sys.__stdout__
+    Checker(initial_board, args.outputfile).alpha_beta_play()
 
